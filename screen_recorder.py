@@ -1,32 +1,48 @@
 #!/usr/bin/env python3
 """
-Screen recorder — saves to MP4.
+Screen recorder — saves to MP4 using ffmpeg x11grab.
+Works on both X11 and Wayland (via XWayland).
+
 Usage:
     python3 screen_recorder.py                  # records full screen
     python3 screen_recorder.py --fps 30         # custom frame rate
     python3 screen_recorder.py -o my_video.mp4  # custom output file
+    python3 screen_recorder.py --region 0,0,1280,720  # record a region (x,y,w,h)
 
 Press Ctrl+C to stop recording.
 """
 
 import argparse
+import os
 import signal
+import subprocess
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
-
-import cv2
-import mss
-import numpy as np
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Screen recorder → MP4")
     parser.add_argument("-o", "--output", default=None, help="Output file (default: recording_TIMESTAMP.mp4)")
-    parser.add_argument("--fps", type=int, default=20, help="Frames per second (default: 20)")
-    parser.add_argument("--monitor", type=int, default=1, help="Monitor index (default: 1 = primary)")
+    parser.add_argument("--fps", type=int, default=30, help="Frames per second (default: 30)")
+    parser.add_argument("--display", default=None, help="X display to capture (default: $DISPLAY or :0)")
+    parser.add_argument("--region", default=None, help="Region to capture as x,y,width,height (default: full screen)")
     return parser.parse_args()
+
+
+def get_screen_size(display):
+    try:
+        out = subprocess.check_output(
+            ["xdpyinfo", "-display", display], stderr=subprocess.DEVNULL
+        ).decode()
+        for line in out.splitlines():
+            if "dimensions:" in line:
+                dims = line.split()[1]
+                w, h = dims.split("x")
+                return int(w), int(h)
+    except Exception:
+        pass
+    return None, None
 
 
 def main():
@@ -35,42 +51,52 @@ def main():
     output = args.output or f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
     output = str(Path(output).expanduser().resolve())
 
-    with mss.MSS() as sct:
-        monitor = sct.monitors[args.monitor]
-        width = monitor["width"]
-        height = monitor["height"]
+    display = args.display or os.environ.get("DISPLAY", ":0")
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(output, fourcc, args.fps, (width, height))
+    if args.region:
+        x, y, w, h = [int(v) for v in args.region.split(",")]
+        grab_input = f"{display}+{x},{y}"
+        size_arg = ["-video_size", f"{w}x{h}"]
+        region_desc = f"{w}x{h} at ({x},{y})"
+    else:
+        w, h = get_screen_size(display)
+        if w and h:
+            size_arg = ["-video_size", f"{w}x{h}"]
+            region_desc = f"{w}x{h} (full screen)"
+        else:
+            size_arg = []
+            region_desc = "full screen"
+        grab_input = display
 
-        print(f"Recording {width}x{height} @ {args.fps}fps  →  {output}")
-        print("Press Ctrl+C to stop.\n")
+    cmd = [
+        "ffmpeg",
+        "-f", "x11grab",
+        "-framerate", str(args.fps),
+        *size_arg,
+        "-i", grab_input,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-y",
+        output,
+    ]
 
-        frame_duration = 1.0 / args.fps
-        frame_count = 0
-        start = time.time()
+    print(f"Recording {region_desc} @ {args.fps}fps  →  {output}")
+    print("Press Ctrl+C to stop.\n")
 
-        def stop(sig, frame):
-            elapsed = time.time() - start
-            print(f"\nStopped. {frame_count} frames, {elapsed:.1f}s  →  {output}")
-            writer.release()
-            sys.exit(0)
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-        signal.signal(signal.SIGINT, stop)
-        signal.signal(signal.SIGTERM, stop)
+    def stop(sig, frame):
+        print("\nStopping...")
+        proc.communicate(input=b"q")
+        print(f"Saved  →  {output}")
+        sys.exit(0)
 
-        while True:
-            t0 = time.time()
-            img = np.array(sct.grab(monitor))
-            # mss gives BGRA — drop alpha, keep BGR for OpenCV
-            frame = img[:, :, :3]
-            writer.write(frame)
-            frame_count += 1
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
 
-            elapsed = time.time() - t0
-            sleep = frame_duration - elapsed
-            if sleep > 0:
-                time.sleep(sleep)
+    proc.wait()
 
 
 if __name__ == "__main__":
