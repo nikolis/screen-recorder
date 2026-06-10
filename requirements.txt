@@ -1,4 +1,6 @@
-# ffmpeg must be installed on the system:
-#   sudo apt install ffmpeg xdpyinfo
+# System packages required (Ubuntu/Debian):
+#   sudo apt install python3-dbus python3-gi gstreamer1.0-pipewire \
+#                    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
+#                    gstreamer1.0-plugins-bad
 
-# No Python dependencies required — uses ffmpeg via subprocess
+# No pip dependencies — uses system dbus, gi (GStreamer), and PipeWire
