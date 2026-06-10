@@ -56,16 +56,6 @@ Press **Ctrl+C** to stop recording. The output file is written to disk immediate
 - Resolution: matches the selected monitor's native resolution
 - Compatible with Instagram, YouTube, and most video platforms
 
-## Instagram API Access
-
-When applying for access to the Instagram Graph API, Meta requires a screen-recorded video demonstrating your app's intended use of the API. Steps:
-
-1. Prepare your app flow in the browser
-2. Run the recorder: `python3 screen_recorder.py -o instagram_demo.mp4`
-3. Walk through your app demonstrating each permission you're requesting
-4. Press Ctrl+C to stop
-5. Upload `instagram_demo.mp4` in the Meta app review submission form
-
 ## How It Works
 
 - Uses [`mss`](https://python-mss.readthedocs.io/) for fast cross-platform screen capture
