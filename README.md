@@ -1,6 +1,6 @@
 # Screen Recorder
 
-A Python screen recorder for **GNOME Wayland** that saves to MP4. Uses `xdg-desktop-portal` + PipeWire + GStreamer — the proper Wayland capture path, no black screen.
+A Python screen recorder for **GNOME Wayland** that saves to MP4. Uses `xdg-desktop-portal` + PipeWire + GStreamer via a GTK4 control window.
 
 Originally created for recording a demo video to submit as part of the Instagram API access application.
 
@@ -15,7 +15,8 @@ sudo apt install python3-dbus python3-gi \
     gstreamer1.0-pipewire \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-ugly \
-    gstreamer1.0-plugins-bad
+    gstreamer1.0-plugins-bad \
+    gir1.2-gtk-4.0
 ```
 
 ## Usage
@@ -31,9 +32,11 @@ python3 screen_recorder.py -o instagram_demo.mp4
 python3 screen_recorder.py --fps 60 -o demo.mp4
 ```
 
-When you run it, a GNOME **"Share your screen"** dialog will appear — click **Share** to begin recording.
+A small **control window** will appear with a **Start Recording** button.
 
-Press **Ctrl+C** to stop. The file is finalized cleanly on exit.
+1. Click **Start Recording** — a GNOME "Share your screen" dialog appears
+2. Click **Share** in that dialog — recording begins immediately
+3. Click **Stop Recording** when done — the file is saved and the app exits
 
 ## Options
 
@@ -54,18 +57,24 @@ When applying for access to the Instagram Graph API, Meta requires a screen-reco
 
 1. Prepare your app flow in the browser
 2. Run: `python3 screen_recorder.py -o instagram_demo.mp4`
-3. Click **Share** in the GNOME dialog
-4. Walk through your app demonstrating each permission you're requesting
-5. Press **Ctrl+C** to stop
-6. Upload `instagram_demo.mp4` in the Meta app review submission form
+3. Click **Start Recording** in the control window
+4. Click **Share** in the GNOME dialog
+5. Walk through your app demonstrating each permission you're requesting
+6. Click **Stop Recording** — file is saved automatically
+7. Upload `instagram_demo.mp4` in the Meta app review submission form
 
 ## How It Works
 
-- Opens the `org.freedesktop.portal.ScreenCast` D-Bus portal, which shows GNOME's native screen share consent dialog
+- Launches a GTK4 window which provides a valid Wayland surface handle (required by the portal)
+- Opens `org.freedesktop.portal.ScreenCast` D-Bus portal, which shows GNOME's native screen share consent dialog
 - After the user clicks Share, retrieves a PipeWire node ID and file descriptor for the stream
 - Captures frames via `pipewiresrc` in a GStreamer pipeline
 - Encodes with `x264enc` and muxes to MP4 via `mp4mux`
-- On Ctrl+C, sends an EOS event to flush and finalize the file cleanly
+- On Stop, sends an EOS event to flush and finalize the file cleanly
+
+## Why a GTK4 window?
+
+The `xdg-desktop-portal-gnome` requires a parent window handle when called from a Wayland session. Calling the portal without one causes it to crash (SEGV). The GTK4 window exports its Wayland surface handle and passes it to the portal, satisfying this requirement.
 
 ## Why not x11grab / mss?
 
